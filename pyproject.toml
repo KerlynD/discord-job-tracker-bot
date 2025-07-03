@@ -42,6 +42,9 @@ ignore = ["E501", "PLR0913", "PLR0915", "PLR2004", "N806", "COM812", "G004", "TR
 "tests/*" = ["S101", "DTZ005", "PLC0415"]  # Allow assert, datetime.now() in tests
 "check_setup.py" = ["PLC0415", "TRY300", "N806", "S105", "S603"]  # Allow conditional imports in setup checker
 "migrations/*" = ["N806"]  # Allow uppercase variables in migrations
+"__init__.py" = ["N999"]  # Allow hyphenated project names in __init__.py files
+"tests/__init__.py" = ["N999"]  # Allow hyphenated project names in __init__.py files  
+"utils/__init__.py" = ["N999"]  # Allow hyphenated project names in __init__.py files
 
 [tool.black]
 line-length = 88
