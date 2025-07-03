@@ -1,0 +1,56 @@
+[tool.poetry]
+name = "job-tracker-bot"
+version = "0.1.0"
+description = "Discord bot for tracking job applications"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+packages = [{include = "job_tracker_bot"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+discord-py = {extras = ["voice"], version = "^2.4.0"}
+sqlalchemy = "^2.0.0"
+aiosqlite = "^0.19.0"
+apscheduler = "^3.10.0"
+python-dotenv = "^1.0.0"
+pydantic = "^2.0.0"
+alembic = "^1.13.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+pytest-asyncio = "^0.21.0"
+pytest-cov = "^4.1.0"
+ruff = "^0.1.0"
+black = "^23.0.0"
+mypy = "^1.5.0"
+safety = "^2.3.0"
+bandit = "^1.7.5"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "C90", "I", "N", "UP", "YTT", "S", "B", "A", "COM", "DTZ", "DJ", "EM", "G", "ICN", "PIE", "T20", "PYI", "PT", "Q", "RSE", "RET", "SLF", "SIM", "TID", "TCH", "ARG", "PTH", "PD", "PGH", "PL", "TRY", "NPY", "RUF"]
+ignore = ["E501", "PLR0913", "PLR0915", "PLR2004"]
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"] 
