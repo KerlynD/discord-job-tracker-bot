@@ -8,8 +8,8 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from models import Base, Reminder, Stage
-from services import JobTrackerService
+from src.job_tracker.models import Base, Reminder, Stage
+from src.job_tracker.services import JobTrackerService
 
 
 @pytest.fixture

@@ -119,7 +119,7 @@ def format_stage_choices() -> list[dict[str, str]]:
     Returns:
         List of choice dictionaries for Discord
     """
-    from models import Stage  # noqa: PLC0415
+    from ..models import Stage  # noqa: PLC0415
 
     choices = []
     for stage in Stage.VALID_STAGES:

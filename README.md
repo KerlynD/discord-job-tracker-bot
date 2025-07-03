@@ -48,11 +48,14 @@ A Discord bot for tracking job applications with stages, reminders, and analytic
 
 4. **Run the bot**
    ```bash
-   # Using Poetry
-   poetry run python bot.py
+   # Using Poetry (recommended)
+   poetry run job-tracker-bot
+   
+   # Or using the run script
+   python run_bot.py
    
    # Or directly
-   python bot.py
+   python -m src.job_tracker.bot
    ```
 
 ## Discord Bot Setup
@@ -235,7 +238,7 @@ COPY . .
 
 RUN pip install poetry && poetry install --no-dev
 
-CMD ["poetry", "run", "python", "bot.py"]
+CMD ["poetry", "run", "job-tracker-bot"]
 ```
 
 ## Features Roadmap

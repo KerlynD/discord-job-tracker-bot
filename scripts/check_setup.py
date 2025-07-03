@@ -39,7 +39,7 @@ def check_dependencies():
 def check_database():
     """Check if database models can be imported and initialized."""
     try:
-        from models import (
+        from src.job_tracker.models import (
             create_engine_and_session,
             init_database,
         )
@@ -59,8 +59,8 @@ def check_services():
         from sqlalchemy import create_engine
         from sqlalchemy.orm import sessionmaker
 
-        from models import Base
-        from services import JobTrackerService
+        from src.job_tracker.models import Base
+        from src.job_tracker.services import JobTrackerService
 
         # Create test database
         engine = create_engine("sqlite:///:memory:")
@@ -81,7 +81,10 @@ def check_services():
 def check_formatting():
     """Check if formatting utilities work."""
     try:
-        from utils.formatting import create_ascii_bar_chart, format_stats_summary
+        from src.job_tracker.utils.formatting import (
+            create_ascii_bar_chart,
+            format_stats_summary,
+        )
 
         test_data = {"Applied": 5, "OA": 3, "Phone": 2}
         create_ascii_bar_chart(test_data)
@@ -120,7 +123,7 @@ def run_tests():
             check=False,
             capture_output=True,
             text=True,
-            cwd=Path(__file__).parent,
+            cwd=Path(__file__).parent.parent,
         )
 
         return result.returncode == 0

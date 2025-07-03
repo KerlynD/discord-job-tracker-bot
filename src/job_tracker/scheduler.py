@@ -9,9 +9,9 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from discord.ext import commands
 
-from models import Reminder, create_engine_and_session
-from services import JobTrackerService
-from utils.formatting import format_reminder_message
+from .models import Reminder, create_engine_and_session
+from .services import JobTrackerService
+from .utils.formatting import format_reminder_message
 
 logger = logging.getLogger(__name__)
 

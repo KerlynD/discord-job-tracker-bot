@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from models import Application, Reminder, Stage
+from .models import Application, Reminder, Stage
 
 
 def ensure_timezone_naive(dt: datetime) -> datetime:

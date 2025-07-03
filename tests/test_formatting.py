@@ -4,7 +4,7 @@ Unit tests for the formatting utilities.
 
 from datetime import datetime
 
-from utils.formatting import (
+from src.job_tracker.utils.formatting import (
     create_ascii_bar_chart,
     format_application_list,
     format_reminder_message,

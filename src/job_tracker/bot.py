@@ -13,10 +13,10 @@ from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from models import create_engine_and_session, init_database
-from scheduler import ReminderScheduler
-from services import JobTrackerService
-from utils.formatting import (
+from .models import create_engine_and_session, init_database
+from .scheduler import ReminderScheduler
+from .services import JobTrackerService
+from .utils.formatting import (
     create_ascii_bar_chart,
     format_application_list,
     format_stats_summary,
@@ -479,8 +479,14 @@ bot.tree.add_command(export_applications)
 bot.tree.add_command(test_reminder)
 
 
-if __name__ == "__main__":
+def main():
+    """Main entry point for the bot."""
     logger.info("Starting Job Tracker Bot...")
+
+    if not DISCORD_TOKEN:
+        logger.error("DISCORD_TOKEN environment variable not set")
+        sys.exit(1)
+
     try:
         bot.run(DISCORD_TOKEN)
     except KeyboardInterrupt:
@@ -489,3 +495,7 @@ if __name__ == "__main__":
         logger.exception(f"Bot crashed: {e}")
     finally:
         logger.info("Bot shutdown complete")
+
+
+if __name__ == "__main__":
+    main()
