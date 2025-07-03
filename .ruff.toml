@@ -1,0 +1,11 @@
+[lint]
+# Ignore specific errors in specific files/directories
+[lint.per-file-ignores]
+"tests/*" = ["S101", "DTZ005", "PLC0415"]  # Allow assert, datetime.now() in tests
+"check_setup.py" = ["PLC0415", "TRY300", "N806", "S105", "S603"]  # Allow conditional imports in setup checker
+"migrations/*" = ["N806"]  # Allow uppercase variables in migrations
+
+# Global ignores for less critical issues
+ignore = [
+    "N806",  # Allow uppercase variables (common for SQLAlchemy)
+] 
