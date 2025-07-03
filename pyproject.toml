@@ -4,7 +4,6 @@ version = "0.1.0"
 description = "Discord bot for tracking job applications"
 authors = ["Your Name <your.email@example.com>"]
 readme = "README.md"
-packages = [{include = "job_tracker_bot"}]
 
 [tool.poetry.dependencies]
 python = "^3.12"
