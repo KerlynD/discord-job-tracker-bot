@@ -1,6 +1,7 @@
 """
 Unit tests for the services module.
 """
+
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -196,8 +197,8 @@ class TestJobTrackerService:
         stats = service.get_application_stats(123)
 
         assert stats["Applied"] == 1  # Amazon
-        assert stats["OA"] == 1      # Google
-        assert stats["Phone"] == 1   # Meta
+        assert stats["OA"] == 1  # Google
+        assert stats["Phone"] == 1  # Meta
 
     def test_export_applications_csv(self, service):
         """Test exporting applications to CSV."""

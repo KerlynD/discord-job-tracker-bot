@@ -13,6 +13,7 @@ def check_python_version():
     """Check if Python version is 3.12 or higher."""
     return True
 
+
 def check_dependencies():
     """Check if all required dependencies are available."""
     required_packages = [
@@ -34,6 +35,7 @@ def check_dependencies():
 
     return not missing
 
+
 def check_database():
     """Check if database models can be imported and initialized."""
     try:
@@ -49,6 +51,7 @@ def check_database():
         return True
     except Exception:
         return False
+
 
 def check_services():
     """Check if service layer works correctly."""
@@ -74,6 +77,7 @@ def check_services():
     except Exception:
         return False
 
+
 def check_formatting():
     """Check if formatting utilities work."""
     try:
@@ -86,6 +90,7 @@ def check_formatting():
         return True
     except Exception:
         return False
+
 
 def check_env_file():
     """Check if .env file exists and has required variables."""
@@ -106,12 +111,14 @@ def check_env_file():
     except Exception:
         return False
 
+
 def run_tests():
     """Run the test suite."""
     try:
         result = subprocess.run(
             [sys.executable, "-m", "pytest", "-v", "tests/"],
-            check=False, capture_output=True,
+            check=False,
+            capture_output=True,
             text=True,
             cwd=Path(__file__).parent,
         )
@@ -119,6 +126,7 @@ def run_tests():
         return result.returncode == 0
     except Exception:
         return False
+
 
 def main():
     """Main setup verification function."""
@@ -140,11 +148,11 @@ def main():
         if check():
             passed += 1
 
-
     if passed == total:
         pass
     else:
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

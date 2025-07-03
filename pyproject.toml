@@ -36,7 +36,12 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "C90", "I", "N", "UP", "YTT", "S", "B", "A", "COM", "DTZ", "DJ", "EM", "G", "ICN", "PIE", "T20", "PYI", "PT", "Q", "RSE", "RET", "SLF", "SIM", "TID", "TCH", "ARG", "PTH", "PD", "PGH", "PL", "TRY", "NPY", "RUF"]
-ignore = ["E501", "PLR0913", "PLR0915", "PLR2004"]
+ignore = ["E501", "PLR0913", "PLR0915", "PLR2004", "N806", "COM812", "G004", "TRY401", "DTZ007", "DTZ005", "PTH123", "PTH107", "TRY300"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "DTZ005", "PLC0415"]  # Allow assert, datetime.now() in tests
+"check_setup.py" = ["PLC0415", "TRY300", "N806", "S105", "S603"]  # Allow conditional imports in setup checker
+"migrations/*" = ["N806"]  # Allow uppercase variables in migrations
 
 [tool.black]
 line-length = 88

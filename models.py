@@ -1,6 +1,7 @@
 """
 SQLAlchemy models for the job tracker bot.
 """
+
 from datetime import UTC, datetime
 from typing import ClassVar, Optional
 
@@ -24,16 +25,26 @@ class Application(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     company: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None))
-    guild_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # For multi-guild support
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
+    guild_id: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )  # For multi-guild support
     user_id: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # Relationships
-    stages: Mapped[list["Stage"]] = relationship("Stage", back_populates="application", cascade="all, delete-orphan")
-    reminders: Mapped[list["Reminder"]] = relationship("Reminder", back_populates="application", cascade="all, delete-orphan")
+    stages: Mapped[list["Stage"]] = relationship(
+        "Stage", back_populates="application", cascade="all, delete-orphan"
+    )
+    reminders: Mapped[list["Reminder"]] = relationship(
+        "Reminder", back_populates="application", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
-        return f"<Application(id={self.id}, company='{self.company}', role='{self.role}')>"
+        return (
+            f"<Application(id={self.id}, company='{self.company}', role='{self.role}')>"
+        )
 
     @property
     def current_stage(self) -> Optional["Stage"]:
@@ -49,15 +60,28 @@ class Stage(Base):
     __tablename__ = "stages"
 
     # Valid stage values
-    VALID_STAGES: ClassVar[set[str]] = {"Applied", "OA", "Phone", "On-site", "Offer", "Rejected"}
+    VALID_STAGES: ClassVar[set[str]] = {
+        "Applied",
+        "OA",
+        "Phone",
+        "On-site",
+        "Offer",
+        "Rejected",
+    }
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    app_id: Mapped[int] = mapped_column(Integer, ForeignKey("applications.id"), nullable=False)
+    app_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("applications.id"), nullable=False
+    )
     stage: Mapped[str] = mapped_column(String(50), nullable=False)
-    date: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None))
+    date: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
 
     # Relationships
-    application: Mapped["Application"] = relationship("Application", back_populates="stages")
+    application: Mapped["Application"] = relationship(
+        "Application", back_populates="stages"
+    )
 
     def __repr__(self) -> str:
         return f"<Stage(id={self.id}, app_id={self.app_id}, stage='{self.stage}', date={self.date})>"
@@ -69,12 +93,16 @@ class Reminder(Base):
     __tablename__ = "reminders"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    app_id: Mapped[int] = mapped_column(Integer, ForeignKey("applications.id"), nullable=False)
+    app_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("applications.id"), nullable=False
+    )
     due_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     sent: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Relationships
-    application: Mapped["Application"] = relationship("Application", back_populates="reminders")
+    application: Mapped["Application"] = relationship(
+        "Application", back_populates="reminders"
+    )
 
     def __repr__(self) -> str:
         return f"<Reminder(id={self.id}, app_id={self.app_id}, due_at={self.due_at}, sent={self.sent})>"

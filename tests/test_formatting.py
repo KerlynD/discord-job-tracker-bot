@@ -1,6 +1,7 @@
 """
 Unit tests for the formatting utilities.
 """
+
 from datetime import datetime
 
 from utils.formatting import (
@@ -96,6 +97,7 @@ class TestFormattingUtilities:
 
 class MockApplication:
     """Mock application object for testing."""
+
     def __init__(self, company, role, current_stage_name="Applied", stage_date=None):
         self.company = company
         self.role = role
@@ -104,6 +106,7 @@ class MockApplication:
 
 class MockStage:
     """Mock stage object for testing."""
+
     def __init__(self, stage, date):
         self.stage = stage
         self.date = date
@@ -111,6 +114,7 @@ class MockStage:
 
 class MockReminder:
     """Mock reminder object for testing."""
+
     def __init__(self, due_at):
         self.due_at = due_at
 

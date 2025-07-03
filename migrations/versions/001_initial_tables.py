@@ -5,6 +5,7 @@ Revises:
 Create Date: 2024-01-01 00:00:00.000000
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -36,7 +37,7 @@ def upgrade() -> None:
         sa.Column("app_id", sa.Integer(), nullable=False),
         sa.Column("stage", sa.String(length=50), nullable=False),
         sa.Column("date", sa.DateTime(), nullable=False),
-        sa.ForeignKeyConstraint(["app_id"], ["applications.id"] ),
+        sa.ForeignKeyConstraint(["app_id"], ["applications.id"]),
     )
 
     # Create reminders table
@@ -46,7 +47,7 @@ def upgrade() -> None:
         sa.Column("app_id", sa.Integer(), nullable=False),
         sa.Column("due_at", sa.DateTime(), nullable=False),
         sa.Column("sent", sa.Boolean(), nullable=False, default=False),
-        sa.ForeignKeyConstraint(["app_id"], ["applications.id"] ),
+        sa.ForeignKeyConstraint(["app_id"], ["applications.id"]),
     )
 
 

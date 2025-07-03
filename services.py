@@ -1,6 +1,7 @@
 """
 Business logic and CRUD operations for the job tracker bot.
 """
+
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
@@ -21,14 +22,20 @@ class JobTrackerService:
     def __init__(self, db_session: Session):
         self.db = db_session
 
-    def add_application(self, company: str, role: str, user_id: int, guild_id: int | None = None) -> Application:
+    def add_application(
+        self, company: str, role: str, user_id: int, guild_id: int | None = None
+    ) -> Application:
         """Add a new job application with default 'Applied' stage."""
         # Check if application already exists
-        existing = self.db.query(Application).filter(
-            Application.company == company,
-            Application.role == role,
-            Application.user_id == user_id,
-        ).first()
+        existing = (
+            self.db.query(Application)
+            .filter(
+                Application.company == company,
+                Application.role == role,
+                Application.user_id == user_id,
+            )
+            .first()
+        )
 
         if existing:
             msg = f"Application for {company} - {role} already exists"
@@ -57,17 +64,23 @@ class JobTrackerService:
 
         return app
 
-    def update_application_stage(self, company: str, stage: str, user_id: int, date: datetime | None = None) -> Stage:
+    def update_application_stage(
+        self, company: str, stage: str, user_id: int, date: datetime | None = None
+    ) -> Stage:
         """Update the stage of an existing application."""
         if stage not in Stage.VALID_STAGES:
             msg = f"Invalid stage '{stage}'. Valid stages: {', '.join(Stage.VALID_STAGES)}"
             raise ValueError(msg)
 
         # Find the application
-        app = self.db.query(Application).filter(
-            Application.company == company,
-            Application.user_id == user_id,
-        ).first()
+        app = (
+            self.db.query(Application)
+            .filter(
+                Application.company == company,
+                Application.user_id == user_id,
+            )
+            .first()
+        )
 
         if not app:
             msg = f"No application found for {company}"
@@ -88,9 +101,21 @@ class JobTrackerService:
 
         return new_stage
 
-    def list_applications(self, user_id: int, stage_filter: str | None = None, limit: int = 15, offset: int = 0) -> list[Application]:
+    def list_applications(
+        self,
+        user_id: int,
+        stage_filter: str | None = None,
+        limit: int = 15,
+        offset: int = 0,
+    ) -> list[Application]:
         """List applications with optional stage filtering and pagination."""
-        apps = self.db.query(Application).filter(Application.user_id == user_id).offset(offset).limit(limit).all()
+        apps = (
+            self.db.query(Application)
+            .filter(Application.user_id == user_id)
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
 
         if stage_filter:
             # Filter by current stage
@@ -103,9 +128,13 @@ class JobTrackerService:
 
         return apps
 
-    def get_stale_applications(self, user_id: int, days_threshold: int = 7) -> list[Application]:
+    def get_stale_applications(
+        self, user_id: int, days_threshold: int = 7
+    ) -> list[Application]:
         """Get applications that haven't been updated in the specified number of days."""
-        cutoff_date = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days_threshold)
+        cutoff_date = datetime.now(UTC).replace(tzinfo=None) - timedelta(
+            days=days_threshold
+        )
 
         # Get all applications for user
         apps = self.db.query(Application).filter(Application.user_id == user_id).all()
@@ -130,10 +159,14 @@ class JobTrackerService:
     def add_reminder(self, company: str, user_id: int, days_from_now: int) -> Reminder:
         """Add a reminder for an application."""
         # Find the application
-        app = self.db.query(Application).filter(
-            Application.company == company,
-            Application.user_id == user_id,
-        ).first()
+        app = (
+            self.db.query(Application)
+            .filter(
+                Application.company == company,
+                Application.user_id == user_id,
+            )
+            .first()
+        )
 
         if not app:
             msg = f"No application found for {company}"
@@ -184,14 +217,22 @@ class JobTrackerService:
 
         return stats
 
-    def get_application_by_company(self, company: str, user_id: int) -> Application | None:
+    def get_application_by_company(
+        self, company: str, user_id: int
+    ) -> Application | None:
         """Get an application by company name for a specific user."""
-        return self.db.query(Application).filter(
-            Application.company == company,
-            Application.user_id == user_id,
-        ).first()
+        return (
+            self.db.query(Application)
+            .filter(
+                Application.company == company,
+                Application.user_id == user_id,
+            )
+            .first()
+        )
 
-    def get_application_count(self, user_id: int, stage_filter: str | None = None) -> int:
+    def get_application_count(
+        self, user_id: int, stage_filter: str | None = None
+    ) -> int:
         """Get the total count of applications for pagination."""
         apps = self.db.query(Application).filter(Application.user_id == user_id).all()
 

@@ -1,6 +1,7 @@
 """
 Main Discord bot for job application tracking.
 """
+
 import logging
 import os
 import sys
@@ -101,7 +102,9 @@ async def on_disconnect():
 )
 async def add_application(interaction: discord.Interaction, company: str, role: str):
     """Add a new job application."""
-    await interaction.response.defer(ephemeral=False)  # Public - celebrate new applications!
+    await interaction.response.defer(
+        ephemeral=False
+    )  # Public - celebrate new applications!
 
     try:
         db_session = get_db_session()
@@ -123,7 +126,9 @@ async def add_application(interaction: discord.Interaction, company: str, role: 
             color=discord.Color.green(),
         )
         embed.add_field(name="Stage", value="Applied", inline=True)
-        embed.add_field(name="Created", value=app.created_at.strftime("%Y-%m-%d %H:%M"), inline=True)
+        embed.add_field(
+            name="Created", value=app.created_at.strftime("%Y-%m-%d %H:%M"), inline=True
+        )
 
         await interaction.followup.send(embed=embed)
 
@@ -133,10 +138,14 @@ async def add_application(interaction: discord.Interaction, company: str, role: 
         await interaction.followup.send(f"❌ Error: {e}")
     except Exception as e:
         logger.exception(f"Error adding application: {e}")
-        await interaction.followup.send("❌ An error occurred while adding the application.")
+        await interaction.followup.send(
+            "❌ An error occurred while adding the application."
+        )
 
 
-@app_commands.command(name="update", description="Update the stage of a job application")
+@app_commands.command(
+    name="update", description="Update the stage of a job application"
+)
 @app_commands.describe(
     company="Company name",
     stage="New stage",
@@ -161,7 +170,9 @@ async def update_application(
             try:
                 update_date = datetime.strptime(date, "%Y-%m-%d")
             except ValueError:
-                await interaction.followup.send("❌ Invalid date format. Use YYYY-MM-DD.")
+                await interaction.followup.send(
+                    "❌ Invalid date format. Use YYYY-MM-DD."
+                )
                 return
 
         # Update the application
@@ -177,7 +188,9 @@ async def update_application(
             description=f"**{company}** stage updated to **{stage}**",
             color=discord.Color.blue(),
         )
-        embed.add_field(name="Date", value=new_stage.date.strftime("%Y-%m-%d %H:%M"), inline=True)
+        embed.add_field(
+            name="Date", value=new_stage.date.strftime("%Y-%m-%d %H:%M"), inline=True
+        )
 
         await interaction.followup.send(embed=embed)
 
@@ -187,7 +200,9 @@ async def update_application(
         await interaction.followup.send(f"❌ Error: {e}")
     except Exception as e:
         logger.exception(f"Error updating application: {e}")
-        await interaction.followup.send("❌ An error occurred while updating the application.")
+        await interaction.followup.send(
+            "❌ An error occurred while updating the application."
+        )
 
 
 @app_commands.command(name="list", description="List job applications")
@@ -197,7 +212,8 @@ async def update_application(
 )
 async def list_applications(
     interaction: discord.Interaction,
-    stage: Literal["Applied", "OA", "Phone", "On-site", "Offer", "Rejected"] | None = None,
+    stage: Literal["Applied", "OA", "Phone", "On-site", "Offer", "Rejected"]
+    | None = None,
     page: int = 1,
 ):
     """List job applications with optional filtering."""
@@ -238,7 +254,9 @@ async def list_applications(
         )
 
         if total_pages > 1:
-            embed.set_footer(text=f"Page {page} of {total_pages} • Total: {total_count} applications")
+            embed.set_footer(
+                text=f"Page {page} of {total_pages} • Total: {total_count} applications"
+            )
 
         await interaction.followup.send(embed=embed)
 
@@ -246,7 +264,9 @@ async def list_applications(
 
     except Exception as e:
         logger.exception(f"Error listing applications: {e}")
-        await interaction.followup.send("❌ An error occurred while listing applications.")
+        await interaction.followup.send(
+            "❌ An error occurred while listing applications."
+        )
 
 
 @app_commands.command(name="todo", description="List applications that need attention")
@@ -259,19 +279,27 @@ async def todo_applications(interaction: discord.Interaction):
         service = get_service(db_session)
 
         # Get stale applications
-        stale_apps = service.get_stale_applications(interaction.user.id, days_threshold=7)
+        stale_apps = service.get_stale_applications(
+            interaction.user.id, days_threshold=7
+        )
 
         # Format the list
-        formatted_list = format_application_list(stale_apps, "🔔 Applications Needing Attention")
+        formatted_list = format_application_list(
+            stale_apps, "🔔 Applications Needing Attention"
+        )
 
         embed = discord.Embed(
             title="🔔 To-Do List",
-            description=formatted_list if stale_apps else "🎉 All applications are up to date!",
+            description=formatted_list
+            if stale_apps
+            else "🎉 All applications are up to date!",
             color=discord.Color.orange() if stale_apps else discord.Color.green(),
         )
 
         if stale_apps:
-            embed.set_footer(text="These applications haven't been updated in over 7 days.")
+            embed.set_footer(
+                text="These applications haven't been updated in over 7 days."
+            )
 
         await interaction.followup.send(embed=embed)
 
@@ -279,7 +307,9 @@ async def todo_applications(interaction: discord.Interaction):
 
     except Exception as e:
         logger.exception(f"Error getting todo list: {e}")
-        await interaction.followup.send("❌ An error occurred while getting the todo list.")
+        await interaction.followup.send(
+            "❌ An error occurred while getting the todo list."
+        )
 
 
 @app_commands.command(name="remind", description="Set a reminder for a job application")
@@ -287,7 +317,11 @@ async def todo_applications(interaction: discord.Interaction):
     company="Company name",
     days="Days from now to remind (1-365)",
 )
-async def set_reminder(interaction: discord.Interaction, company: str, days: app_commands.Range[int, 1, 365]):
+async def set_reminder(
+    interaction: discord.Interaction,
+    company: str,
+    days: app_commands.Range[int, 1, 365],
+):
     """Set a reminder for a job application."""
     await interaction.response.defer(ephemeral=True)
 
@@ -322,13 +356,17 @@ async def set_reminder(interaction: discord.Interaction, company: str, days: app
         await interaction.followup.send(f"❌ Error: {e}")
     except Exception as e:
         logger.exception(f"Error setting reminder: {e}")
-        await interaction.followup.send("❌ An error occurred while setting the reminder.")
+        await interaction.followup.send(
+            "❌ An error occurred while setting the reminder."
+        )
 
 
 @app_commands.command(name="stats", description="View application statistics")
 async def view_stats(interaction: discord.Interaction):
     """View application statistics with ASCII bar chart."""
-    await interaction.response.defer(ephemeral=False)  # Public - show off your progress!
+    await interaction.response.defer(
+        ephemeral=False
+    )  # Public - show off your progress!
 
     try:
         db_session = get_db_session()
@@ -364,7 +402,9 @@ async def view_stats(interaction: discord.Interaction):
 
     except Exception as e:
         logger.exception(f"Error getting stats: {e}")
-        await interaction.followup.send("❌ An error occurred while getting statistics.")
+        await interaction.followup.send(
+            "❌ An error occurred while getting statistics."
+        )
 
 
 @app_commands.command(name="export", description="Export applications to CSV")
@@ -379,7 +419,10 @@ async def export_applications(interaction: discord.Interaction):
         # Get CSV data
         csv_data = service.export_applications_csv(interaction.user.id)
 
-        if not csv_data or csv_data == "Company,Role,Current Stage,Created At,Last Updated":
+        if (
+            not csv_data
+            or csv_data == "Company,Role,Current Stage,Created At,Last Updated"
+        ):
             await interaction.followup.send("❌ No applications to export.")
             return
 
@@ -404,7 +447,9 @@ async def export_applications(interaction: discord.Interaction):
 
     except Exception as e:
         logger.exception(f"Error exporting applications: {e}")
-        await interaction.followup.send("❌ An error occurred while exporting applications.")
+        await interaction.followup.send(
+            "❌ An error occurred while exporting applications."
+        )
 
 
 @app_commands.command(name="test_reminder", description="Test the reminder system")
@@ -418,7 +463,9 @@ async def test_reminder(interaction: discord.Interaction):
 
     except Exception as e:
         logger.exception(f"Error testing reminder: {e}")
-        await interaction.followup.send("❌ An error occurred while testing the reminder system.")
+        await interaction.followup.send(
+            "❌ An error occurred while testing the reminder system."
+        )
 
 
 # Add commands to the bot's tree

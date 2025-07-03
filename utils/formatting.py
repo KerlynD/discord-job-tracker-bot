@@ -3,7 +3,9 @@ Formatting utilities for the job tracker bot.
 """
 
 
-def create_ascii_bar_chart(data: dict[str, int], title: str = "Application Statistics", max_width: int = 40) -> str:
+def create_ascii_bar_chart(
+    data: dict[str, int], title: str = "Application Statistics", max_width: int = 40
+) -> str:
     """
     Create an ASCII bar chart from a dictionary of data.
 
@@ -73,7 +75,9 @@ def format_application_list(applications: list, title: str = "Applications") -> 
         lines.append(f"    └─ Stage: {stage_name}")
 
         if current_stage:
-            lines.append(f"    └─ Updated: {current_stage.date.strftime('%Y-%m-%d %H:%M')}")
+            lines.append(
+                f"    └─ Updated: {current_stage.date.strftime('%Y-%m-%d %H:%M')}"
+            )
 
         lines.append("")  # Empty line for spacing
 
@@ -119,10 +123,12 @@ def format_stage_choices() -> list[dict[str, str]]:
 
     choices = []
     for stage in Stage.VALID_STAGES:
-        choices.append({
-            "name": stage,
-            "value": stage,
-        })
+        choices.append(
+            {
+                "name": stage,
+                "value": stage,
+            }
+        )
 
     return choices
 
@@ -141,7 +147,7 @@ def truncate_text(text: str, max_length: int = 100) -> str:
     if len(text) <= max_length:
         return text
 
-    return text[:max_length - 3] + "..."
+    return text[: max_length - 3] + "..."
 
 
 def format_stats_summary(stats: dict[str, int]) -> str:

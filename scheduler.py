@@ -1,6 +1,7 @@
 """
 Reminder scheduler for the job tracker bot.
 """
+
 import logging
 
 import discord
@@ -95,7 +96,11 @@ class ReminderScheduler:
                 try:
                     user = await self.bot.fetch_user(application.user_id)
                 except discord.NotFound:
-                    logger.warning("User %s not found for reminder %s", application.user_id, reminder.id)
+                    logger.warning(
+                        "User %s not found for reminder %s",
+                        application.user_id,
+                        reminder.id,
+                    )
                     service.mark_reminder_sent(reminder.id)
                     return
 
@@ -126,9 +131,13 @@ class ReminderScheduler:
             service = JobTrackerService(db_session)
 
             # Get the specific reminder
-            reminder = db_session.query(Reminder).filter(
-                Reminder.id == reminder_id,
-            ).first()
+            reminder = (
+                db_session.query(Reminder)
+                .filter(
+                    Reminder.id == reminder_id,
+                )
+                .first()
+            )
 
             if reminder and not reminder.sent:
                 await self.send_reminder(reminder, service)
@@ -143,7 +152,9 @@ class ReminderScheduler:
         return {
             "running": self.scheduler.running,
             "jobs": len(self.scheduler.get_jobs()),
-            "next_run": self.scheduler.get_jobs()[0].next_run_time if self.scheduler.get_jobs() else None,
+            "next_run": self.scheduler.get_jobs()[0].next_run_time
+            if self.scheduler.get_jobs()
+            else None,
         }
 
     async def test_reminder_system(self, user_id: int) -> str:
