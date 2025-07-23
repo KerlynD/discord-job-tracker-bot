@@ -5,6 +5,7 @@ Main Discord bot for job application tracking.
 import logging
 import os
 import sys
+import time
 from datetime import datetime
 from typing import Literal
 
@@ -19,6 +20,7 @@ from .services import JobTrackerService
 from .utils.formatting import (
     create_ascii_bar_chart,
     format_application_list,
+    format_discord_timestamp,
     format_stats_summary,
 )
 
@@ -95,12 +97,46 @@ async def on_disconnect():
         logger.warning(f"Error stopping reminder scheduler on disconnect: {e}")
 
 
+# Autocomplete function for companies
+async def company_autocomplete(
+    interaction: discord.Interaction,
+    current: str,
+) -> list[app_commands.Choice[str]]:
+    """Autocomplete function for company names."""
+    try:
+        db_session = get_db_session()
+        service = get_service(db_session)
+        
+        active_companies = service.get_active_companies(interaction.user.id)
+        db_session.close()
+        
+        # Filter companies based on current input
+        filtered = [
+            company for company in active_companies 
+            if current.lower() in company.lower()
+        ][:25]  # Discord limits to 25 choices
+        
+        return [
+            app_commands.Choice(name=company, value=company)
+            for company in filtered
+        ]
+    except Exception as e:
+        logger.exception(f"Error in company autocomplete: {e}")
+        return []
+
+
 @app_commands.command(name="add", description="Add a new job application")
 @app_commands.describe(
     company="Company name",
     role="Job role/title",
+    season="Application season (default: Summer)",
 )
-async def add_application(interaction: discord.Interaction, company: str, role: str):
+async def add_application(
+    interaction: discord.Interaction, 
+    company: str, 
+    role: str,
+    season: Literal["Summer", "Fall", "Winter", "Full time"] = "Summer"
+):
     """Add a new job application."""
     await interaction.response.defer(
         ephemeral=False
@@ -116,6 +152,7 @@ async def add_application(interaction: discord.Interaction, company: str, role: 
         app = service.add_application(
             company=company,
             role=role,
+            season=season,
             user_id=interaction.user.id,
             guild_id=guild_id,
         )
@@ -126,8 +163,9 @@ async def add_application(interaction: discord.Interaction, company: str, role: 
             color=discord.Color.green(),
         )
         embed.add_field(name="Stage", value="Applied", inline=True)
+        embed.add_field(name="Season", value=season, inline=True)
         embed.add_field(
-            name="Created", value=app.created_at.strftime("%Y-%m-%d %H:%M"), inline=True
+            name="Created", value=format_discord_timestamp(app.created_at, "f"), inline=True
         )
 
         await interaction.followup.send(embed=embed)
@@ -147,15 +185,16 @@ async def add_application(interaction: discord.Interaction, company: str, role: 
     name="update", description="Update the stage of a job application"
 )
 @app_commands.describe(
-    company="Company name",
+    company="Company name (select from your applications)",
     stage="New stage",
-    date="Date (YYYY-MM-DD format, optional)",
+    date="Date as unix timestamp (optional, defaults to now)",
 )
+@app_commands.autocomplete(company=company_autocomplete)
 async def update_application(
     interaction: discord.Interaction,
     company: str,
     stage: Literal["Applied", "OA", "Phone", "On-site", "Offer", "Rejected"],
-    date: str | None = None,
+    date: int | None = None,
 ):
     """Update the stage of a job application."""
     await interaction.response.defer(ephemeral=False)  # Public - celebrate progress!
@@ -164,23 +203,12 @@ async def update_application(
         db_session = get_db_session()
         service = get_service(db_session)
 
-        # Parse date if provided
-        update_date = None
-        if date:
-            try:
-                update_date = datetime.strptime(date, "%Y-%m-%d")
-            except ValueError:
-                await interaction.followup.send(
-                    "❌ Invalid date format. Use YYYY-MM-DD."
-                )
-                return
-
         # Update the application
         new_stage = service.update_application_stage(
             company=company,
             stage=stage,
             user_id=interaction.user.id,
-            date=update_date,
+            date=date,
         )
 
         embed = discord.Embed(
@@ -189,7 +217,7 @@ async def update_application(
             color=discord.Color.blue(),
         )
         embed.add_field(
-            name="Date", value=new_stage.date.strftime("%Y-%m-%d %H:%M"), inline=True
+            name="Date", value=format_discord_timestamp(new_stage.date, "f"), inline=True
         )
 
         await interaction.followup.send(embed=embed)
@@ -208,12 +236,14 @@ async def update_application(
 @app_commands.command(name="list", description="List job applications")
 @app_commands.describe(
     stage="Filter by stage (optional)",
+    season="Filter by season (optional)",
     page="Page number (default: 1)",
 )
 async def list_applications(
     interaction: discord.Interaction,
     stage: Literal["Applied", "OA", "Phone", "On-site", "Offer", "Rejected"]
     | None = None,
+    season: Literal["Summer", "Fall", "Winter", "Full time"] | None = None,
     page: int = 1,
 ):
     """List job applications with optional filtering."""
@@ -231,16 +261,25 @@ async def list_applications(
         applications = service.list_applications(
             user_id=interaction.user.id,
             stage_filter=stage,
+            season_filter=season,
             limit=limit,
             offset=offset,
         )
 
         # Get total count for pagination info
-        total_count = service.get_application_count(interaction.user.id, stage)
+        total_count = service.get_application_count(interaction.user.id, stage, season)
         total_pages = (total_count + limit - 1) // limit
 
         # Format the list
-        title = f"Applications{f' - {stage}' if stage else ''}"
+        filters = []
+        if stage:
+            filters.append(stage)
+        if season:
+            filters.append(season)
+        
+        title = "Applications"
+        if filters:
+            title += f" - {' & '.join(filters)}"
         if total_pages > 1:
             title += f" (Page {page}/{total_pages})"
 
@@ -314,9 +353,10 @@ async def todo_applications(interaction: discord.Interaction):
 
 @app_commands.command(name="remind", description="Set a reminder for a job application")
 @app_commands.describe(
-    company="Company name",
+    company="Company name (select from your applications)",
     days="Days from now to remind (1-365)",
 )
+@app_commands.autocomplete(company=company_autocomplete)
 async def set_reminder(
     interaction: discord.Interaction,
     company: str,
@@ -343,7 +383,7 @@ async def set_reminder(
         )
         embed.add_field(
             name="Reminder Date",
-            value=reminder.due_at.strftime("%Y-%m-%d %H:%M"),
+            value=format_discord_timestamp(reminder.due_at, "f"),
             inline=True,
         )
         embed.set_footer(text="You'll receive a DM when the reminder is due.")
@@ -421,13 +461,13 @@ async def export_applications(interaction: discord.Interaction):
 
         if (
             not csv_data
-            or csv_data == "Company,Role,Current Stage,Created At,Last Updated"
+            or csv_data == "Company,Role,Season,Current Stage,Created At,Last Updated"
         ):
             await interaction.followup.send("❌ No applications to export.")
             return
 
         # Create file
-        filename = f"job_applications_{interaction.user.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        filename = f"job_applications_{interaction.user.id}_{int(time.time())}.csv"
 
         with open(filename, "w", encoding="utf-8") as f:
             f.write(csv_data)

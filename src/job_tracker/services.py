@@ -2,18 +2,39 @@
 Business logic and CRUD operations for the job tracker bot.
 """
 
-from datetime import UTC, datetime, timedelta
+import time
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
 from .models import Application, Reminder, Stage
 
 
-def ensure_timezone_naive(dt: datetime) -> datetime:
-    """Ensure a datetime is timezone-naive (remove timezone info)."""
-    if dt.tzinfo is not None:
-        return dt.replace(tzinfo=None)
-    return dt
+def safe_timestamp_conversion(date_value) -> int:
+    """Convert various date formats to unix timestamp."""
+    if isinstance(date_value, int):
+        return date_value
+    elif isinstance(date_value, str):
+        # Try to parse various string formats
+        try:
+            # Try ISO format first
+            dt = datetime.fromisoformat(date_value.replace('Z', '+00:00'))
+            return int(dt.timestamp())
+        except ValueError:
+            try:
+                # Try common datetime format
+                dt = datetime.strptime(date_value, '%Y-%m-%d %H:%M:%S.%f')
+                return int(dt.timestamp())
+            except ValueError:
+                try:
+                    # Try without microseconds
+                    dt = datetime.strptime(date_value, '%Y-%m-%d %H:%M:%S')
+                    return int(dt.timestamp())
+                except ValueError:
+                    # If all else fails, return current time
+                    return int(time.time())
+    else:
+        return int(time.time())
 
 
 class JobTrackerService:
@@ -23,9 +44,19 @@ class JobTrackerService:
         self.db = db_session
 
     def add_application(
-        self, company: str, role: str, user_id: int, guild_id: int | None = None
+        self, 
+        company: str, 
+        role: str, 
+        user_id: int, 
+        season: str = "Summer",
+        guild_id: int | None = None
     ) -> Application:
         """Add a new job application with default 'Applied' stage."""
+        # Validate season
+        if season not in Application.VALID_SEASONS:
+            msg = f"Invalid season '{season}'. Valid seasons: {', '.join(Application.VALID_SEASONS)}"
+            raise ValueError(msg)
+            
         # Check if application already exists
         existing = (
             self.db.query(Application)
@@ -45,9 +76,10 @@ class JobTrackerService:
         app = Application(
             company=company,
             role=role,
+            season=season,
             user_id=user_id,
             guild_id=guild_id,
-            created_at=datetime.now(UTC).replace(tzinfo=None),
+            created_at=int(time.time()),
         )
         self.db.add(app)
         self.db.commit()
@@ -57,7 +89,7 @@ class JobTrackerService:
         stage = Stage(
             app_id=app.id,
             stage="Applied",
-            date=datetime.now(UTC).replace(tzinfo=None),
+            date=int(time.time()),
         )
         self.db.add(stage)
         self.db.commit()
@@ -65,7 +97,7 @@ class JobTrackerService:
         return app
 
     def update_application_stage(
-        self, company: str, stage: str, user_id: int, date: datetime | None = None
+        self, company: str, stage: str, user_id: int, date: int | None = None
     ) -> Stage:
         """Update the stage of an existing application."""
         if stage not in Stage.VALID_STAGES:
@@ -87,9 +119,25 @@ class JobTrackerService:
             raise ValueError(msg)
 
         # Create new stage record
-        stage_date = date or datetime.now(UTC).replace(tzinfo=None)
-        if stage_date and stage_date.tzinfo is not None:
-            stage_date = stage_date.replace(tzinfo=None)
+        if date is None:
+            # Ensure the new stage has a timestamp later than any existing stage
+            latest_stage = (
+                self.db.query(Stage)
+                .filter(Stage.app_id == app.id)
+                .order_by(Stage.date.desc())
+                .first()
+            )
+            current_time = int(time.time())
+            if latest_stage:
+                latest_date = safe_timestamp_conversion(latest_stage.date)
+                if latest_date >= current_time:
+                    stage_date = latest_date + 1  # Ensure it's at least 1 second later
+                else:
+                    stage_date = current_time
+            else:
+                stage_date = current_time
+        else:
+            stage_date = date
 
         new_stage = Stage(
             app_id=app.id,
@@ -105,17 +153,17 @@ class JobTrackerService:
         self,
         user_id: int,
         stage_filter: str | None = None,
+        season_filter: str | None = None,
         limit: int = 15,
         offset: int = 0,
     ) -> list[Application]:
-        """List applications with optional stage filtering and pagination."""
-        apps = (
-            self.db.query(Application)
-            .filter(Application.user_id == user_id)
-            .offset(offset)
-            .limit(limit)
-            .all()
-        )
+        """List applications with optional stage/season filtering and pagination."""
+        query = self.db.query(Application).filter(Application.user_id == user_id)
+        
+        if season_filter:
+            query = query.filter(Application.season == season_filter)
+            
+        apps = query.offset(offset).limit(limit).all()
 
         if stage_filter:
             # Filter by current stage
@@ -132,9 +180,7 @@ class JobTrackerService:
         self, user_id: int, days_threshold: int = 7
     ) -> list[Application]:
         """Get applications that haven't been updated in the specified number of days."""
-        cutoff_date = datetime.now(UTC).replace(tzinfo=None) - timedelta(
-            days=days_threshold
-        )
+        cutoff_timestamp = int(time.time()) - (days_threshold * 24 * 60 * 60)
 
         # Get all applications for user
         apps = self.db.query(Application).filter(Application.user_id == user_id).all()
@@ -150,8 +196,8 @@ class JobTrackerService:
             )
 
             if latest_stage:
-                stage_date = ensure_timezone_naive(latest_stage.date)
-                if stage_date < cutoff_date:
+                stage_timestamp = safe_timestamp_conversion(latest_stage.date)
+                if stage_timestamp < cutoff_timestamp:
                     stale_apps.append(app)
 
         return stale_apps
@@ -173,7 +219,7 @@ class JobTrackerService:
             raise ValueError(msg)
 
         # Calculate due date
-        due_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(days=days_from_now)
+        due_at = int(time.time()) + (days_from_now * 24 * 60 * 60)
 
         # Create reminder
         reminder = Reminder(
@@ -188,7 +234,7 @@ class JobTrackerService:
 
     def get_due_reminders(self) -> list[Reminder]:
         """Get all unsent reminders that are due."""
-        now = datetime.now(UTC).replace(tzinfo=None)
+        now = int(time.time())
         return (
             self.db.query(Reminder)
             .filter(Reminder.due_at <= now, Reminder.sent.is_(False))
@@ -210,9 +256,16 @@ class JobTrackerService:
         apps = self.db.query(Application).filter(Application.user_id == user_id).all()
 
         for app in apps:
-            current_stage = app.current_stage
-            if current_stage:
-                stage_name = current_stage.stage
+            # Get the most recent stage for this application directly from database
+            latest_stage = (
+                self.db.query(Stage)
+                .filter(Stage.app_id == app.id)
+                .order_by(Stage.date.desc())
+                .first()
+            )
+            
+            if latest_stage:
+                stage_name = latest_stage.stage
                 stats[stage_name] = stats.get(stage_name, 0) + 1
 
         return stats
@@ -231,35 +284,74 @@ class JobTrackerService:
         )
 
     def get_application_count(
-        self, user_id: int, stage_filter: str | None = None
+        self, user_id: int, stage_filter: str | None = None, season_filter: str | None = None
     ) -> int:
         """Get the total count of applications for pagination."""
-        apps = self.db.query(Application).filter(Application.user_id == user_id).all()
+        query = self.db.query(Application).filter(Application.user_id == user_id)
+        
+        if season_filter:
+            query = query.filter(Application.season == season_filter)
+            
+        apps = query.all()
 
         if stage_filter:
             # Count applications whose current stage matches the filter
             count = 0
             for app in apps:
-                current_stage = app.current_stage
-                if current_stage and current_stage.stage == stage_filter:
+                # Get the most recent stage for this application
+                latest_stage = (
+                    self.db.query(Stage)
+                    .filter(Stage.app_id == app.id)
+                    .order_by(Stage.date.desc())
+                    .first()
+                )
+                if latest_stage and latest_stage.stage == stage_filter:
                     count += 1
             return count
 
         return len(apps)
 
+    def get_active_companies(self, user_id: int) -> list[str]:
+        """Get list of companies for applications that haven't been rejected."""
+        apps = self.db.query(Application).filter(Application.user_id == user_id).all()
+        
+        active_companies = []
+        for app in apps:
+            # Get the most recent stage for this application directly from database
+            latest_stage = (
+                self.db.query(Stage)
+                .filter(Stage.app_id == app.id)
+                .order_by(Stage.date.desc())
+                .first()
+            )
+            
+            # Only include companies that aren't rejected
+            if latest_stage and latest_stage.stage != "Rejected":
+                active_companies.append(app.company)
+        
+        # Return unique companies, sorted alphabetically
+        return sorted(list(set(active_companies)))
+
     def export_applications_csv(self, user_id: int) -> str:
         """Export applications to CSV format."""
         apps = self.db.query(Application).filter(Application.user_id == user_id).all()
 
-        csv_lines = ["Company,Role,Current Stage,Created At,Last Updated"]
+        csv_lines = ["Company,Role,Season,Current Stage,Created At,Last Updated"]
 
         for app in apps:
-            current_stage = app.current_stage
-            stage_name = current_stage.stage if current_stage else "Unknown"
-            last_updated = current_stage.date if current_stage else app.created_at
+            # Get the most recent stage for this application
+            latest_stage = (
+                self.db.query(Stage)
+                .filter(Stage.app_id == app.id)
+                .order_by(Stage.date.desc())
+                .first()
+            )
+            
+            stage_name = latest_stage.stage if latest_stage else "Unknown"
+            last_updated_timestamp = safe_timestamp_conversion(latest_stage.date) if latest_stage else safe_timestamp_conversion(app.created_at)
 
             csv_lines.append(
-                f"{app.company},{app.role},{stage_name},{app.created_at.isoformat()},{last_updated.isoformat()}",
+                f"{app.company},{app.role},{app.season},{stage_name},{safe_timestamp_conversion(app.created_at)},{last_updated_timestamp}",
             )
 
         return "\n".join(csv_lines)

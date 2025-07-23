@@ -3,6 +3,27 @@ Formatting utilities for the job tracker bot.
 """
 
 
+def format_discord_timestamp(timestamp: int, format_type: str = "F") -> str:
+    """
+    Format a unix timestamp for Discord display.
+    
+    Args:
+        timestamp: Unix timestamp
+        format_type: Discord timestamp format type
+            - "t": Short time (16:20)
+            - "T": Long time (16:20:30)
+            - "d": Short date (20/04/2021)
+            - "D": Long date (20 April 2021)
+            - "f": Short datetime (20 April 2021 16:20)
+            - "F": Long datetime (Tuesday, 20 April 2021 16:20)
+            - "R": Relative time (2 months ago)
+    
+    Returns:
+        Discord timestamp markdown string
+    """
+    return f"<t:{timestamp}:{format_type}>"
+
+
 def create_ascii_bar_chart(
     data: dict[str, int], title: str = "Application Statistics", max_width: int = 40
 ) -> str:
@@ -71,12 +92,14 @@ def format_application_list(applications: list, title: str = "Applications") -> 
 
         # Format the application entry
         line = f"{i:>2}. **{app.company}** - {app.role}"
+        if app.season != "Full time":
+            line += f" ({app.season})"
         lines.append(line)
         lines.append(f"    └─ Stage: {stage_name}")
 
         if current_stage:
             lines.append(
-                f"    └─ Updated: {current_stage.date.strftime('%Y-%m-%d %H:%M')}"
+                f"    └─ Updated: {format_discord_timestamp(current_stage.date, 'f')}"
             )
 
         lines.append("")  # Empty line for spacing
@@ -101,11 +124,12 @@ def format_reminder_message(application, reminder) -> str:
     message = "🔔 **Job Application Reminder**\n\n"
     message += f"**Company:** {application.company}\n"
     message += f"**Role:** {application.role}\n"
+    if application.season != "Full time":
+        message += f"**Season:** {application.season}\n"
     message += f"**Current Stage:** {stage_name}\n"
 
     if current_stage:
-        days_since_update = (reminder.due_at - current_stage.date).days
-        message += f"**Last Updated:** {current_stage.date.strftime('%Y-%m-%d')} ({days_since_update} days ago)\n"
+        message += f"**Last Updated:** {format_discord_timestamp(current_stage.date, 'f')} ({format_discord_timestamp(current_stage.date, 'R')})\n"
 
     message += "\n💡 Consider following up or updating the application status!"
 
@@ -127,6 +151,27 @@ def format_stage_choices() -> list[dict[str, str]]:
             {
                 "name": stage,
                 "value": stage,
+            }
+        )
+
+    return choices
+
+
+def format_season_choices() -> list[dict[str, str]]:
+    """
+    Format season choices for Discord slash command options.
+
+    Returns:
+        List of choice dictionaries for Discord
+    """
+    from ..models import Application  # noqa: PLC0415
+
+    choices = []
+    for season in Application.VALID_SEASONS:
+        choices.append(
+            {
+                "name": season,
+                "value": season,
             }
         )
 

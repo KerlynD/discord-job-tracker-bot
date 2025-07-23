@@ -3,6 +3,7 @@ Reminder scheduler for the job tracker bot.
 """
 
 import logging
+import time
 
 import discord
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -54,22 +55,16 @@ class ReminderScheduler:
             logger.warning("Error stopping scheduler: %s", e)
 
     async def check_reminders(self) -> None:
-        """Check for due reminders and send DMs."""
+        """Check for due reminders and send them."""
         try:
             db_session = self.SessionLocal()
             service = JobTrackerService(db_session)
 
-            # Get all due reminders
+            # Get due reminders
             due_reminders = service.get_due_reminders()
 
-            logger.info("Found %d due reminders", len(due_reminders))
-
             for reminder in due_reminders:
-                try:
-                    await self.send_reminder(reminder, service)
-                except Exception:
-                    logger.exception("Failed to send reminder %s", reminder.id)
-                    # Continue with other reminders even if one fails
+                await self.send_reminder(reminder, service)
 
             db_session.close()
 
@@ -158,20 +153,34 @@ class ReminderScheduler:
         }
 
     async def test_reminder_system(self, user_id: int) -> str:
-        """Test the reminder system by sending a test message."""
+        """Test the reminder system by creating and processing a test reminder."""
         try:
-            user = self.bot.get_user(user_id)
-            if not user:
-                user = await self.bot.fetch_user(user_id)
+            db_session = self.SessionLocal()
+            service = JobTrackerService(db_session)
 
-            test_message = "🧪 **Test Reminder**\n\nThis is a test message to verify the reminder system is working correctly!"
+            # Create a test reminder with past due date (1 hour ago)
+            test_due_time = int(time.time()) - 3600
 
-            await user.send(test_message)
-            return f"Test reminder sent successfully to {user.display_name}"
+            test_reminder = Reminder(
+                app_id=1,  # Assuming there's at least one application
+                due_at=test_due_time,
+                sent=False,
+            )
 
-        except discord.NotFound:
-            return f"User {user_id} not found"
-        except discord.Forbidden:
-            return "Cannot send DM to user (DMs disabled)"
+            db_session.add(test_reminder)
+            db_session.commit()
+
+            # Check if we can retrieve it
+            due_reminders = service.get_due_reminders()
+            test_found = any(r.id == test_reminder.id for r in due_reminders)
+
+            # Clean up test reminder
+            db_session.delete(test_reminder)
+            db_session.commit()
+            db_session.close()
+
+            return f"Test {'PASSED' if test_found else 'FAILED'} - Due reminder detection working"
+
         except Exception as e:
-            return f"Error sending test reminder: {e}"
+            logger.exception("Error in test_reminder_system")
+            return f"Test FAILED - Error: {e}"

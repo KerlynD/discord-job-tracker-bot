@@ -121,6 +121,7 @@ dmypy.json
 # Project specific
 jobs.db
 bot.log
+run_bot.bat
 *.csv
 migrations/versions/*.py
 !migrations/versions/001_initial_tables.py

@@ -2,10 +2,10 @@
 SQLAlchemy models for the job tracker bot.
 """
 
-from datetime import UTC, datetime
+import time
 from typing import ClassVar, Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, create_engine
+from sqlalchemy import Boolean, ForeignKey, Integer, String, create_engine
 from sqlalchemy.orm import (
     Mapped,
     declarative_base,
@@ -21,12 +21,21 @@ class Application(Base):
     """Represents a job application."""
 
     __tablename__ = "applications"
+    
+    # Valid season values
+    VALID_SEASONS: ClassVar[set[str]] = {
+        "Summer",
+        "Fall", 
+        "Winter",
+        "Full time",
+    }
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     company: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+    season: Mapped[str] = mapped_column(String(20), nullable=False, default="Summer")
+    created_at: Mapped[int] = mapped_column(
+        Integer, default=lambda: int(time.time())
     )
     guild_id: Mapped[int | None] = mapped_column(
         Integer, nullable=True
@@ -43,7 +52,7 @@ class Application(Base):
 
     def __repr__(self) -> str:
         return (
-            f"<Application(id={self.id}, company='{self.company}', role='{self.role}')>"
+            f"<Application(id={self.id}, company='{self.company}', role='{self.role}', season='{self.season}')>"
         )
 
     @property
@@ -51,7 +60,30 @@ class Application(Base):
         """Get the most recent stage for this application."""
         if not self.stages:
             return None
-        return max(self.stages, key=lambda s: s.date)
+        
+        # Handle mixed date types (strings and integers)
+        def safe_date_key(stage):
+            if isinstance(stage.date, int):
+                return stage.date
+            elif isinstance(stage.date, str):
+                try:
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(stage.date.replace('Z', '+00:00'))
+                    return int(dt.timestamp())
+                except ValueError:
+                    try:
+                        dt = datetime.strptime(stage.date, '%Y-%m-%d %H:%M:%S.%f')
+                        return int(dt.timestamp())
+                    except ValueError:
+                        try:
+                            dt = datetime.strptime(stage.date, '%Y-%m-%d %H:%M:%S')
+                            return int(dt.timestamp())
+                        except ValueError:
+                            return 0
+            else:
+                return 0
+        
+        return max(self.stages, key=safe_date_key)
 
 
 class Stage(Base):
@@ -74,8 +106,8 @@ class Stage(Base):
         Integer, ForeignKey("applications.id"), nullable=False
     )
     stage: Mapped[str] = mapped_column(String(50), nullable=False)
-    date: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+    date: Mapped[int] = mapped_column(
+        Integer, default=lambda: int(time.time())
     )
 
     # Relationships
@@ -96,7 +128,7 @@ class Reminder(Base):
     app_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("applications.id"), nullable=False
     )
-    due_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    due_at: Mapped[int] = mapped_column(Integer, nullable=False)
     sent: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Relationships
