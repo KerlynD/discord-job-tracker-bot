@@ -60,6 +60,114 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 reminder_scheduler = ReminderScheduler(bot, DATABASE_URL)
 
 
+class PaginationView(discord.ui.View):
+    """Pagination view for list command with buttons to navigate pages."""
+    
+    def __init__(self, user_id: int, stage_filter: str | None = None, season_filter: str | None = None):
+        super().__init__(timeout=300)  # 5 minute timeout
+        self.user_id = user_id
+        self.stage_filter = stage_filter
+        self.season_filter = season_filter
+        self.current_page = 1
+        self.total_pages = 1
+        self.limit = 15
+        
+    async def update_embed(self, interaction: discord.Interaction):
+        """Update the embed with new page data."""
+        try:
+            db_session = get_db_session()
+            service = get_service(db_session)
+            
+            # Calculate pagination
+            offset = (self.current_page - 1) * self.limit
+            
+            # Get applications
+            applications = service.list_applications(
+                user_id=self.user_id,
+                stage_filter=self.stage_filter,
+                season_filter=self.season_filter,
+                limit=self.limit,
+                offset=offset,
+            )
+            
+            # Get total count for pagination info
+            total_count = service.get_application_count(self.user_id, self.stage_filter, self.season_filter)
+            self.total_pages = (total_count + self.limit - 1) // self.limit
+            
+            # Format the list
+            filters = []
+            if self.stage_filter:
+                filters.append(self.stage_filter)
+            if self.season_filter:
+                filters.append(self.season_filter)
+            
+            title = "Applications"
+            if filters:
+                title += f" - {' & '.join(filters)}"
+            if self.total_pages > 1:
+                title += f" (Page {self.current_page}/{self.total_pages})"
+            
+            formatted_list = format_application_list(applications, title)
+            
+            # Create embed
+            embed = discord.Embed(
+                title=title,
+                description=formatted_list if applications else "No applications found.",
+                color=discord.Color.blue(),
+            )
+            
+            if self.total_pages > 1:
+                embed.set_footer(
+                    text=f"Page {self.current_page} of {self.total_pages} • Total: {total_count} applications"
+                )
+            
+            # Update button states
+            self.previous_button.disabled = self.current_page <= 1
+            self.next_button.disabled = self.current_page >= self.total_pages
+            
+            await interaction.response.edit_message(embed=embed, view=self)
+            
+            db_session.close()
+            
+        except Exception as e:
+            logger.exception(f"Error updating pagination: {e}")
+            await interaction.response.send_message(
+                "❌ An error occurred while updating the list.", ephemeral=True
+            )
+    
+    @discord.ui.button(label="◀ Previous", style=discord.ButtonStyle.primary)
+    async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Go to previous page."""
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ Only the command user can navigate pages.", ephemeral=True)
+            return
+            
+        if self.current_page > 1:
+            self.current_page -= 1
+            await self.update_embed(interaction)
+        else:
+            await interaction.response.defer()
+    
+    @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.primary)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Go to next page."""
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ Only the command user can navigate pages.", ephemeral=True)
+            return
+            
+        if self.current_page < self.total_pages:
+            self.current_page += 1
+            await self.update_embed(interaction)
+        else:
+            await interaction.response.defer()
+    
+    async def on_timeout(self):
+        """Called when the view times out."""
+        # Disable all buttons when timeout occurs
+        for item in self.children:
+            item.disabled = True
+
+
 def get_db_session():
     """Get a database session."""
     return SessionLocal()
@@ -130,12 +238,14 @@ async def company_autocomplete(
     company="Company name",
     role="Job role/title",
     season="Application season (default: Summer)",
+    application_date="Date you applied as unix timestamp (optional, defaults to now)",
 )
 async def add_application(
     interaction: discord.Interaction, 
     company: str, 
     role: str,
-    season: Literal["Summer", "Fall", "Winter", "Full time"] = "Summer"
+    season: Literal["Summer", "Fall", "Winter", "Full time"] = "Summer",
+    application_date: int | None = None,
 ):
     """Add a new job application."""
     await interaction.response.defer(
@@ -155,6 +265,7 @@ async def add_application(
             season=season,
             user_id=interaction.user.id,
             guild_id=guild_id,
+            application_date=application_date,
         )
 
         embed = discord.Embed(
@@ -193,7 +304,7 @@ async def add_application(
 async def update_application(
     interaction: discord.Interaction,
     company: str,
-    stage: Literal["Applied", "OA", "Phone", "On-site", "Offer", "Rejected"],
+    stage: Literal["Applied", "OA", "Phone", "On-site", "Offer", "Rejected", "Ghosted"],
     date: int | None = None,
 ):
     """Update the stage of a job application."""
@@ -237,16 +348,14 @@ async def update_application(
 @app_commands.describe(
     stage="Filter by stage (optional)",
     season="Filter by season (optional)",
-    page="Page number (default: 1)",
 )
 async def list_applications(
     interaction: discord.Interaction,
-    stage: Literal["Applied", "OA", "Phone", "On-site", "Offer", "Rejected"]
+    stage: Literal["Applied", "OA", "Phone", "On-site", "Offer", "Rejected", "Ghosted"]
     | None = None,
     season: Literal["Summer", "Fall", "Winter", "Full time"] | None = None,
-    page: int = 1,
 ):
-    """List job applications with optional filtering."""
+    """List job applications with optional filtering and pagination buttons."""
     await interaction.response.defer(ephemeral=True)
 
     try:
@@ -255,7 +364,7 @@ async def list_applications(
 
         # Calculate pagination
         limit = 15
-        offset = (page - 1) * limit
+        offset = 0  # Always start from page 1
 
         # Get applications
         applications = service.list_applications(
@@ -281,7 +390,7 @@ async def list_applications(
         if filters:
             title += f" - {' & '.join(filters)}"
         if total_pages > 1:
-            title += f" (Page {page}/{total_pages})"
+            title += f" (Page 1/{total_pages})"
 
         formatted_list = format_application_list(applications, title)
 
@@ -294,10 +403,23 @@ async def list_applications(
 
         if total_pages > 1:
             embed.set_footer(
-                text=f"Page {page} of {total_pages} • Total: {total_count} applications"
+                text=f"Page 1 of {total_pages} • Total: {total_count} applications"
             )
 
-        await interaction.followup.send(embed=embed)
+        # Create pagination view if there are multiple pages
+        if total_pages > 1:
+            view = PaginationView(user_id=interaction.user.id, stage_filter=stage, season_filter=season)
+            view.current_page = 1
+            view.total_pages = total_pages
+            
+            # Set initial button states
+            view.previous_button.disabled = True  # First page, so disable previous
+            view.next_button.disabled = False
+            
+            await interaction.followup.send(embed=embed, view=view)
+        else:
+            # No pagination needed
+            await interaction.followup.send(embed=embed)
 
         db_session.close()
 

@@ -49,7 +49,8 @@ class JobTrackerService:
         role: str, 
         user_id: int, 
         season: str = "Summer",
-        guild_id: int | None = None
+        guild_id: int | None = None,
+        application_date: int | None = None
     ) -> Application:
         """Add a new job application with default 'Applied' stage."""
         # Validate season
@@ -73,13 +74,14 @@ class JobTrackerService:
             raise ValueError(msg)
 
         # Create new application
+        creation_time = application_date if application_date is not None else int(time.time())
         app = Application(
             company=company,
             role=role,
             season=season,
             user_id=user_id,
             guild_id=guild_id,
-            created_at=int(time.time()),
+            created_at=creation_time,
         )
         self.db.add(app)
         self.db.commit()
@@ -89,7 +91,7 @@ class JobTrackerService:
         stage = Stage(
             app_id=app.id,
             stage="Applied",
-            date=int(time.time()),
+            date=creation_time,
         )
         self.db.add(stage)
         self.db.commit()
@@ -325,8 +327,8 @@ class JobTrackerService:
                 .first()
             )
             
-            # Only include companies that aren't rejected
-            if latest_stage and latest_stage.stage != "Rejected":
+            # Only include companies that aren't rejected or ghosted
+            if latest_stage and latest_stage.stage not in ["Rejected", "Ghosted"]:
                 active_companies.append(app.company)
         
         # Return unique companies, sorted alphabetically

@@ -99,6 +99,7 @@ class Stage(Base):
         "On-site",
         "Offer",
         "Rejected",
+        "Ghosted",
     }
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
