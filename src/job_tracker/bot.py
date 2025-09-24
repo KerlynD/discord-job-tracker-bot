@@ -14,6 +14,7 @@ from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
+from .ai_service import JobSearchAI
 from .models import create_engine_and_session, init_database
 from .scheduler import ReminderScheduler
 from .services import JobTrackerService
@@ -58,6 +59,94 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Initialize scheduler
 reminder_scheduler = ReminderScheduler(bot, DATABASE_URL)
+
+# Initialize AI service (with error handling for missing API key)
+try:
+    ai_search = JobSearchAI()
+    AI_ENABLED = True
+except ValueError as e:
+    logger.warning(f"AI search disabled: {e}")
+    ai_search = None
+    AI_ENABLED = False
+
+
+class PrivacySettingsView(discord.ui.View):
+    """View for managing privacy settings."""
+    
+    def __init__(self, user_id: int, current_setting: bool):
+        super().__init__(timeout=300)  # 5 minute timeout
+        self.user_id = user_id
+        self.current_setting = current_setting
+        
+        # Update button styles based on current setting
+        self.enable_button.style = discord.ButtonStyle.success if current_setting else discord.ButtonStyle.secondary
+        self.disable_button.style = discord.ButtonStyle.danger if not current_setting else discord.ButtonStyle.secondary
+    
+    @discord.ui.button(label="✅ Enable Cross-User Search", style=discord.ButtonStyle.success)
+    async def enable_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Enable cross-user search for this user."""
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ You can only change your own privacy settings.", ephemeral=True)
+            return
+        
+        try:
+            db_session = get_db_session()
+            service = get_service(db_session)
+            
+            service.update_user_preferences(self.user_id, allow_cross_user_search=True)
+            self.current_setting = True
+            
+            # Update button styles
+            self.enable_button.style = discord.ButtonStyle.success
+            self.disable_button.style = discord.ButtonStyle.secondary
+            
+            embed = discord.Embed(
+                title="🔒 Privacy Settings Updated",
+                description="✅ **Cross-user search enabled**\n\nYour application data can now be included in community analytics and aggregate searches by other users.",
+                color=discord.Color.green()
+            )
+            embed.set_footer(text="Your data will be anonymized when shared with others")
+            
+            await interaction.response.edit_message(embed=embed, view=self)
+            
+            db_session.close()
+            
+        except Exception as e:
+            logger.exception(f"Error updating privacy settings: {e}")
+            await interaction.response.send_message("❌ An error occurred while updating settings.", ephemeral=True)
+    
+    @discord.ui.button(label="❌ Disable Cross-User Search", style=discord.ButtonStyle.secondary)
+    async def disable_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Disable cross-user search for this user."""
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ You can only change your own privacy settings.", ephemeral=True)
+            return
+        
+        try:
+            db_session = get_db_session()
+            service = get_service(db_session)
+            
+            service.update_user_preferences(self.user_id, allow_cross_user_search=False)
+            self.current_setting = False
+            
+            # Update button styles
+            self.enable_button.style = discord.ButtonStyle.secondary
+            self.disable_button.style = discord.ButtonStyle.danger
+            
+            embed = discord.Embed(
+                title="🔒 Privacy Settings Updated",
+                description="❌ **Cross-user search disabled**\n\nYour application data will NOT be included in community analytics. Only you can search your own data.",
+                color=discord.Color.red()
+            )
+            embed.set_footer(text="You can re-enable this at any time")
+            
+            await interaction.response.edit_message(embed=embed, view=self)
+            
+            db_session.close()
+            
+        except Exception as e:
+            logger.exception(f"Error updating privacy settings: {e}")
+            await interaction.response.send_message("❌ An error occurred while updating settings.", ephemeral=True)
 
 
 class PaginationView(discord.ui.View):
@@ -187,10 +276,15 @@ async def on_ready():
     # Start the reminder scheduler
     await reminder_scheduler.start()
 
-    # Sync commands
+    # Sync commands globally (takes longer to appear but more reliable)
     try:
         synced = await bot.tree.sync()
-        logger.info(f"Synced {len(synced)} commands")
+        logger.info(f"Synced {len(synced)} commands globally")
+        
+        # Log all synced commands for debugging
+        for command in synced:
+            logger.info(f"- Synced command: /{command.name}")
+            
     except Exception as e:
         logger.exception(f"Failed to sync commands: {e}")
 
@@ -203,6 +297,8 @@ async def on_disconnect():
         await reminder_scheduler.stop()
     except Exception as e:
         logger.warning(f"Error stopping reminder scheduler on disconnect: {e}")
+
+
 
 
 # Autocomplete function for companies
@@ -231,6 +327,61 @@ async def company_autocomplete(
     except Exception as e:
         logger.exception(f"Error in company autocomplete: {e}")
         return []
+
+
+@app_commands.command(name="search", description="Search your applications using natural language")
+@app_commands.describe(
+    query="Natural language question about your applications (e.g., 'How many Bloomberg interviews?')",
+)
+async def search_applications(
+    interaction: discord.Interaction,
+    query: str,
+):
+    """Search applications using AI-powered natural language processing."""
+    if not AI_ENABLED:
+        await interaction.response.send_message(
+            "❌ AI search is not available. Please set the GEMINI_API_KEY environment variable.",
+            ephemeral=True
+        )
+        return
+    
+    await interaction.response.defer(ephemeral=False)
+    
+    try:
+        # Validate the query
+        is_valid, error_msg = ai_search.validate_query(query)
+        if not is_valid:
+            logger.warning(f"Search query blocked for user {interaction.user.id}: {error_msg}")
+            await interaction.followup.send(f"❌ {error_msg}")
+            return
+        
+        db_session = get_db_session()
+        
+        # Get AI response
+        response = await ai_search.search(db_session, interaction.user.id, query)
+        
+        # Create embed for the response
+        embed = discord.Embed(
+            title="🔍 Search Results",
+            description=response,
+            color=discord.Color.purple(),
+        )
+        embed.add_field(
+            name="Query",
+            value=f"*{query}*",
+            inline=False
+        )
+        embed.set_footer(text="Powered by Gemini AI")
+        
+        await interaction.followup.send(embed=embed)
+        
+        db_session.close()
+        
+    except Exception as e:
+        logger.exception(f"Error in search command: {e}")
+        await interaction.followup.send(
+            "❌ An error occurred while processing your search query."
+        )
 
 
 @app_commands.command(name="add", description="Add a new job application")
@@ -630,7 +781,75 @@ async def test_reminder(interaction: discord.Interaction):
         )
 
 
+@app_commands.command(name="security", description="Manage your privacy settings")
+async def security_settings(interaction: discord.Interaction):
+    """Manage user privacy and security settings."""
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        db_session = get_db_session()
+        service = get_service(db_session)
+        
+        # Get current preferences
+        prefs = service.get_user_preferences(interaction.user.id)
+        
+        # Create view with privacy toggle
+        view = PrivacySettingsView(interaction.user.id, prefs.allow_cross_user_search)
+        
+        embed = discord.Embed(
+            title="🔒 Privacy & Security Settings",
+            description="Manage how your application data can be used in cross-user searches.",
+            color=discord.Color.blue()
+        )
+        
+        embed.add_field(
+            name="Cross-User Search",
+            value=f"**Status**: {'Enabled' if prefs.allow_cross_user_search else 'Disabled'}\n"
+                  f"When enabled, other users can include your data in aggregate searches like "
+                  f"'Who is in the Bloomberg process?' Your data will be anonymized as 'User_{interaction.user.id}'.",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="What This Means",
+            value="• **Enabled**: Your applications appear in community analytics\n"
+                  "• **Disabled**: Only you can search your own data\n"
+                  "• **Always**: Your personal data stays private to you",
+            inline=False
+        )
+        
+        embed.set_footer(text="Use the buttons below to change your settings")
+        
+        await interaction.followup.send(embed=embed, view=view)
+        
+        db_session.close()
+        
+    except Exception as e:
+        logger.exception(f"Error showing security settings: {e}")
+        await interaction.followup.send(
+            "❌ An error occurred while loading security settings."
+        )
+
+
+@app_commands.command(name="sync", description="Force sync bot commands (admin only)")
+async def force_sync(interaction: discord.Interaction):
+    """Force sync all bot commands with Discord."""
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        synced = await bot.tree.sync()
+        await interaction.followup.send(f"Successfully synced {len(synced)} commands")
+        logger.info(f"Force synced {len(synced)} commands by {interaction.user}")
+        
+    except Exception as e:
+        logger.exception(f"Error force syncing commands: {e}")
+        await interaction.followup.send(
+            "An error occurred while syncing commands."
+        )
+
+
 # Add commands to the bot's tree
+bot.tree.add_command(search_applications)
 bot.tree.add_command(add_application)
 bot.tree.add_command(update_application)
 bot.tree.add_command(list_applications)
@@ -639,6 +858,8 @@ bot.tree.add_command(set_reminder)
 bot.tree.add_command(view_stats)
 bot.tree.add_command(export_applications)
 bot.tree.add_command(test_reminder)
+bot.tree.add_command(security_settings)
+bot.tree.add_command(force_sync)
 
 
 def main():

@@ -7,7 +7,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from .models import Application, Reminder, Stage
+from .models import Application, Reminder, Stage, UserPreferences
 
 
 def safe_timestamp_conversion(date_value) -> int:
@@ -357,3 +357,106 @@ class JobTrackerService:
             )
 
         return "\n".join(csv_lines)
+
+    def get_user_preferences(self, user_id: int) -> UserPreferences:
+        """Get or create user preferences."""
+        prefs = self.db.query(UserPreferences).filter(UserPreferences.user_id == user_id).first()
+        
+        if not prefs:
+            # Create default preferences
+            prefs = UserPreferences(
+                user_id=user_id,
+                allow_cross_user_search=True,
+                created_at=int(time.time()),
+                updated_at=int(time.time())
+            )
+            self.db.add(prefs)
+            self.db.commit()
+            self.db.refresh(prefs)
+        
+        return prefs
+
+    def update_user_preferences(self, user_id: int, allow_cross_user_search: bool) -> UserPreferences:
+        """Update user privacy preferences."""
+        prefs = self.get_user_preferences(user_id)
+        prefs.allow_cross_user_search = allow_cross_user_search
+        prefs.updated_at = int(time.time())
+        self.db.commit()
+        self.db.refresh(prefs)
+        return prefs
+
+    def get_cross_user_data_context(self, requesting_user_id: int) -> dict:
+        """Get anonymized cross-user data for AI analysis, respecting privacy settings."""
+        # Get all users who allow cross-user search
+        allowed_users = (
+            self.db.query(UserPreferences)
+            .filter(UserPreferences.allow_cross_user_search == True)
+            .all()
+        )
+        
+        # Also include users who haven't set preferences (default is allow)
+        all_user_ids = {pref.user_id for pref in allowed_users}
+        
+        # Get users who have applications but no preferences (default allow)
+        users_with_apps = (
+            self.db.query(Application.user_id)
+            .distinct()
+            .all()
+        )
+        
+        for (user_id,) in users_with_apps:
+            existing_pref = self.db.query(UserPreferences).filter(UserPreferences.user_id == user_id).first()
+            if not existing_pref:
+                all_user_ids.add(user_id)
+        
+        # Get applications for all allowed users
+        applications = (
+            self.db.query(Application)
+            .filter(Application.user_id.in_(all_user_ids))
+            .all()
+        )
+        
+        # Create anonymized context
+        context_data = {
+            "total_users": len(all_user_ids),
+            "total_applications": len(applications),
+            "applications_by_company": {},
+            "applications_by_stage": {},
+            "user_data": []  # Anonymized user data
+        }
+        
+        for app in applications:
+            current_stage = app.current_stage
+            stage_name = current_stage.stage if current_stage else "Unknown"
+            
+            # Count by company
+            if app.company not in context_data["applications_by_company"]:
+                context_data["applications_by_company"][app.company] = {
+                    "total": 0,
+                    "by_stage": {}
+                }
+            
+            context_data["applications_by_company"][app.company]["total"] += 1
+            
+            if stage_name not in context_data["applications_by_company"][app.company]["by_stage"]:
+                context_data["applications_by_company"][app.company]["by_stage"][stage_name] = 0
+            
+            context_data["applications_by_company"][app.company]["by_stage"][stage_name] += 1
+            
+            # Count by stage globally
+            if stage_name not in context_data["applications_by_stage"]:
+                context_data["applications_by_stage"][stage_name] = 0
+            context_data["applications_by_stage"][stage_name] += 1
+            
+            # Add anonymized user data (just user ID for the requesting user's own data)
+            user_identifier = f"User_{app.user_id}" if app.user_id != requesting_user_id else "You"
+            
+            context_data["user_data"].append({
+                "user": user_identifier,
+                "company": app.company,
+                "role": app.role,
+                "current_stage": stage_name,
+                "season": app.season
+            })
+        
+        return context_data

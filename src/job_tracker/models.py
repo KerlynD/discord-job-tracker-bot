@@ -141,6 +141,26 @@ class Reminder(Base):
         return f"<Reminder(id={self.id}, app_id={self.app_id}, due_at={self.due_at}, sent={self.sent})>"
 
 
+class UserPreferences(Base):
+    """Represents user privacy and feature preferences."""
+
+    __tablename__ = "user_preferences"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
+    guild_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    allow_cross_user_search: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[int] = mapped_column(
+        Integer, default=lambda: int(time.time())
+    )
+    updated_at: Mapped[int] = mapped_column(
+        Integer, default=lambda: int(time.time())
+    )
+
+    def __repr__(self) -> str:
+        return f"<UserPreferences(user_id={self.user_id}, allow_cross_user_search={self.allow_cross_user_search})>"
+
+
 # Database setup functions
 def create_engine_and_session(database_url: str = "sqlite:///jobs.db"):
     """Create database engine and session factory."""
